@@ -36,9 +36,9 @@ function showPaymentPendingBanner() {
 
 // ── Razorpay Payment Links ────────────────────────────────────────
 const PAYMENT_LINKS = {
-  performance: 'https://rzp.io/l/REPLACE_WITH_PERF_LINK',
-  influencer:  'https://rzp.io/l/REPLACE_WITH_INF_LINK',
-  both:        'https://rzp.io/l/REPLACE_WITH_BOTH_LINK',
+  performance: 'https://rzp.io/rzp/VfHWmQUK',
+  influencer:  'https://rzp.io/rzp/By4xdE1',
+  both:        'https://rzp.io/rzp/kXgDYDK8',
 };
 
 async function startPayment(courseKey, studentId, name, email) {
