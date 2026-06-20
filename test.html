@@ -210,17 +210,17 @@ async function init() {
   }
 
   // Check if already passed
-  const { data: attempts } = await sb
-    .from('mcq_attempts')
+  const { data: priorProgress } = await sb
+    .from('progress')
     .select('*')
     .eq('student_id', s.id)
-    .eq('level', level)
-    .eq('passed', true)
+    .eq('challenge_name', LEVEL_META[level].badge)
+    .eq('status', 'passed')
     .limit(1);
 
-  if(attempts && attempts.length > 0) {
+  if(priorProgress && priorProgress.length > 0) {
     // Already passed — show result directly
-    showResult(true, attempts[0].score, attempts[0].total, true);
+    showResult(true, null, null, true, priorProgress[0].score);
     document.getElementById('loadingScreen').style.display = 'none';
     document.getElementById('mainContent').style.display = 'block';
     return;
@@ -346,17 +346,36 @@ async function submitTest() {
   questions.forEach((q, i) => { if(answers[i] === q.correct) correct++; });
   const total = questions.length;
   const passed = correct / total >= PASS_MARK;
+  const scorePct = Math.round((correct/total)*100);
 
-  // Save attempt
-  const { error: attErr } = await sb.from('mcq_attempts').insert({
-    student_id: student.id,
-    track: LEVEL_META[level].track,
-    level: level,
-    score: correct,
-    total: total,
-    passed: passed,
-    answers: answers,
-  });
+  // Save / update progress row for this challenge
+  const { data: existing } = await sb
+    .from('progress')
+    .select('id, attempts')
+    .eq('student_id', student.id)
+    .eq('challenge_name', LEVEL_META[level].badge)
+    .limit(1);
+
+  if(existing && existing.length > 0) {
+    await sb.from('progress').update({
+      status: passed ? 'passed' : 'failed',
+      score: scorePct,
+      attempts: (existing[0].attempts || 0) + 1,
+      last_attempted_at: new Date().toISOString(),
+      completed_at: passed ? new Date().toISOString() : null,
+    }).eq('id', existing[0].id);
+  } else {
+    await sb.from('progress').insert({
+      student_id: student.id,
+      challenge_name: LEVEL_META[level].badge,
+      track: LEVEL_META[level].track,
+      status: passed ? 'passed' : 'failed',
+      score: scorePct,
+      attempts: 1,
+      last_attempted_at: new Date().toISOString(),
+      completed_at: passed ? new Date().toISOString() : null,
+    });
+  }
 
   if(passed) {
     // Award badge
@@ -393,22 +412,22 @@ async function submitTest() {
   showResult(passed, correct, total, false);
 }
 
-function showResult(passed, correct, total, alreadyPassed) {
+function showResult(passed, correct, total, alreadyPassed, priorScorePct) {
   document.getElementById('testScreen').style.display = 'none';
   const card = document.getElementById('resultCard');
   card.classList.add('show');
 
-  const pct = Math.round((correct/total)*100);
-
   if(alreadyPassed) {
     document.getElementById('resultEmoji').textContent = '🏅';
     document.getElementById('resultTitle').textContent = 'Already passed!';
-    document.getElementById('resultScore').textContent = correct + ' / ' + total + ' correct · ' + pct + '%';
+    document.getElementById('resultScore').textContent = (priorScorePct != null ? priorScorePct + '%' : 'Passed');
     document.getElementById('resultMsg').textContent = 'You have already completed this level. Head to your dashboard to continue your journey.';
     document.getElementById('resultBadge').style.display = 'block';
     document.getElementById('resultBadgeName').textContent = LEVEL_META[level].badge;
     return;
   }
+
+  const pct = Math.round((correct/total)*100);
 
   if(passed) {
     document.getElementById('resultEmoji').textContent = '🎯';
