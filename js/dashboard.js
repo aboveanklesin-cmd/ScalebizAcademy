@@ -67,13 +67,13 @@ async function init() {
     .from('students').select('*').eq('auth_id', session.user.id).single();
   if (error || !student) { window.location.href = '/'; return; }
 
-  // Fetch badges, progress, attendance
+  // Fetch badges, attempts, attendance
   const { data: badges     } = await sb.from('badges').select('*').eq('student_id', student.id);
-  const { data: progress   } = await sb.from('progress').select('*').eq('student_id', student.id);
+  const { data: attempts   } = await sb.from('mcq_attempts').select('*').eq('student_id', student.id);
   const { data: attendance } = await sb.from('attendance').select('*').eq('student_id', student.id);
 
   const earned     = (badges     || []).map(b => b.badge_name);
-  const passed     = (progress   || []).filter(p => p.status === 'passed');
+  const passed     = (attempts   || []).filter(a => a.passed === true);
   const attended   = (attendance || []).map(a => a.module_id);
   const purchased  = student.payment_status || 'free';
 
@@ -126,7 +126,7 @@ async function init() {
     // Find if next module for this level has been attended
     const lvlModules   = MODULES.filter(m => m.level === lvl.id);
     const anyAttended  = lvlModules.some(m => attended.includes(m.id));
-    const testPassed   = passed.some(p => p.challenge_name.includes(lvl.name));
+    const testPassed   = passed.some(a => a.level === lvl.id);
 
     const iconClass  = isEarned ? 'done' : hasAccess && anyAttended ? 'current' : hasAccess ? 'current' : 'locked';
     let statusText   = 'locked';
@@ -139,7 +139,8 @@ async function init() {
     else if (hasAccess && anyAttended && !testPassed)      { statusText = 'test ready ✨';    statusClass = 'test';   }
     else if (hasAccess && !anyAttended)                    { statusText = 'attend class';      statusClass = 'attend'; }
 
-    const scoreData = (progress || []).find(p => p.challenge_name.includes(lvl.name) && p.status === 'passed');
+    const scoreData = passed.find(a => a.level === lvl.id);
+    const scorePct  = scoreData ? Math.round((scoreData.score / scoreData.total) * 100) : null;
 
     const item = document.createElement('div');
     item.className = 'journey-item';
@@ -147,7 +148,7 @@ async function init() {
       <div class="ji-icon ${iconClass}">${lvl.emoji}</div>
       <div style="flex:1;">
         <div class="ji-name">${lvl.name}</div>
-        <div class="ji-sub">level 0${lvl.id}${scoreData ? ' · scored ' + scoreData.score + '%' : ''}</div>
+        <div class="ji-sub">level 0${lvl.id}${scorePct !== null ? ' · scored ' + scorePct + '%' : ''}</div>
       </div>
       <div class="ji-status ${statusClass}">${statusText}</div>`;
     journeyCard.appendChild(item);
@@ -181,7 +182,7 @@ async function init() {
   } else {
     visibleMods.forEach(mod => {
       const isAttended = attended.includes(mod.id);
-      const modPassed  = passed.some(p => p.challenge_name.includes(mod.name));
+      const modPassed  = passed.some(a => a.level === mod.level);
       const statusText  = modPassed ? 'passed' : isAttended ? 'test ready ✨' : 'attend class';
       const statusClass = modPassed ? 'done'   : isAttended ? 'ready'         : 'locked';
 
